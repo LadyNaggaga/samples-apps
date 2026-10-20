@@ -1,0 +1,1299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Command Line Todo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    /* Layout: an inverted status header above one centered task console */
+    :root {
+      --surface: #D6D6D4;
+      --panel: #E2E2E0;
+      --ink: #0B0B0B;
+      --muted: #6B6B6B;
+      --invert-text: #D6D6D4;
+      --invert-muted: #9A9A98;
+      --hair: #B9B9B6;
+      --display: "Inter", "Arial Black", Arial, sans-serif;
+      --mono: "JetBrains Mono", "Courier New", ui-monospace, monospace;
+      --b: 1.25px solid var(--ink);
+      color-scheme: light;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-width: 0; background: var(--surface); color: var(--ink); }
+    body {
+      min-height: 100vh;
+      overflow-x: hidden;
+      font-family: var(--mono);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; }
+    button { border-radius: 0; }
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+    .wrap {
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+      padding-left: max(16px, env(safe-area-inset-left, 0px));
+      padding-right: max(16px, env(safe-area-inset-right, 0px));
+    }
+
+    .header {
+      border-bottom: var(--b);
+      background: var(--ink);
+      color: var(--invert-text);
+    }
+    .header-inner {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 28px;
+      align-items: end;
+      padding-top: 34px;
+      padding-bottom: 30px;
+    }
+    .brand { min-width: 0; }
+    .mark {
+      display: block;
+      width: 28px;
+      height: 16px;
+      margin-bottom: 22px;
+      color: var(--invert-text);
+    }
+    h1 {
+      display: flex;
+      align-items: flex-end;
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(36px, 8vw, 56px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: .95;
+    }
+    .title-cursor {
+      display: none;
+      width: 9px;
+      height: 12px;
+      margin: 0 0 4px 5px;
+      background: var(--invert-text);
+    }
+    .date {
+      margin: 10px 0 0;
+      color: var(--invert-muted);
+      font-size: 12px;
+    }
+    .summary {
+      padding-bottom: 2px;
+      text-align: right;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .meter { display: inline-block; font-size: 13px; font-weight: 700; }
+    .meter-percent { display: inline-block; padding: 0 2px; }
+    .shipped {
+      margin-top: 6px;
+      color: var(--invert-muted);
+      font-size: 11px;
+    }
+
+    main { padding-top: 34px; padding-bottom: 28px; }
+    .card { border: var(--b); background: var(--panel); }
+    .prompt {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px;
+      border-bottom: var(--b);
+      background: var(--surface);
+    }
+    .prompt-glyph { flex: 0 0 auto; font-weight: 700; }
+    .input-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+    }
+    .prompt input {
+      width: 100%;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--ink);
+      caret-color: transparent;
+      font: 500 15px/1.4 var(--mono);
+    }
+    .input-caret {
+      position: absolute;
+      top: 50%;
+      left: var(--caret-x, 0px);
+      display: none;
+      width: 9px;
+      height: 12px;
+      background: var(--ink);
+      pointer-events: none;
+      transform: translateY(-50%);
+    }
+    .prompt input::placeholder { color: var(--muted); opacity: 1; }
+    .prompt input:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+    .btn {
+      flex: 0 0 auto;
+      padding: 7px 13px;
+      border: var(--b);
+      background: var(--ink);
+      color: var(--invert-text);
+      font: 700 12px var(--mono);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .btn:hover { background: var(--surface); color: var(--ink); }
+    .hint {
+      padding: 8px 16px;
+      border-bottom: var(--b);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 16px;
+      border-bottom: var(--b);
+      background: var(--panel);
+    }
+    .tabs { display: flex; flex: 0 0 auto; border: var(--b); }
+    .tabs button {
+      padding: 5px 11px;
+      border: 0;
+      border-right: var(--b);
+      background: var(--panel);
+      color: var(--ink);
+      font: 500 12px var(--mono);
+      cursor: pointer;
+    }
+    .tabs button:last-child { border-right: 0; }
+    .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--invert-text); }
+    .tags { display: flex; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    .tag {
+      padding: 3px 7px;
+      border: 1.25px dashed var(--muted);
+      background: var(--panel);
+      color: var(--muted);
+      font: 500 11px var(--mono);
+      cursor: pointer;
+    }
+    .tag[aria-pressed="true"] { border: var(--b); background: var(--surface); color: var(--ink); }
+
+    .list { min-height: 190px; }
+    .row {
+      position: relative;
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: start;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--hair);
+      background: var(--panel);
+    }
+    .row:last-child { border-bottom: 0; }
+    .row:hover { background: var(--surface); }
+    .row.urgent::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 4px;
+      background: var(--ink);
+    }
+    .check {
+      position: relative;
+      display: grid;
+      width: 20px;
+      height: 20px;
+      margin-top: 1px;
+      padding: 0;
+      place-items: center;
+      border: var(--b);
+      background: var(--surface);
+      color: var(--ink);
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .check::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--ink);
+      transform: scaleX(0);
+      transform-origin: left;
+    }
+    .check[aria-checked="true"] { background: var(--ink); color: var(--invert-text); }
+    .check::after {
+      content: "";
+      position: relative;
+      z-index: 1;
+      width: 9px;
+      height: 5px;
+      margin-top: -2px;
+      border-bottom: 2px solid var(--invert-text);
+      border-left: 2px solid var(--invert-text);
+      opacity: 0;
+      transform: rotate(-45deg);
+    }
+    .check[aria-checked="true"]::after { opacity: 1; }
+    .body { min-width: 0; }
+    .text {
+      position: relative;
+      display: inline;
+      overflow-wrap: anywhere;
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .text::after {
+      content: "";
+      position: absolute;
+      top: 52%;
+      left: 0;
+      width: 0;
+      height: 1.25px;
+      background: var(--muted);
+      pointer-events: none;
+    }
+    .meta { margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .time { display: inline-block; min-width: 8ch; }
+    .row.done .text { color: var(--muted); }
+    .row.done .text::after { width: 100%; }
+    .rm {
+      align-self: center;
+      padding: 3px 0 3px 6px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font: 500 11px var(--mono);
+      text-decoration: none;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .row:hover .rm, .rm:focus-visible { opacity: 1; }
+    .rm:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+    .empty {
+      display: grid;
+      min-height: 190px;
+      padding: 34px 18px;
+      place-content: center;
+      text-align: center;
+    }
+    .empty-title {
+      margin: 0;
+      font-family: var(--display);
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .empty-copy { margin: 7px 0 0; color: var(--muted); font-size: 12px; }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 11px 16px;
+      border-top: var(--b);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .footer-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 14px; }
+    .quiet {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font: 500 11px var(--mono);
+      cursor: pointer;
+    }
+    .quiet:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+    .quiet:disabled { color: var(--hair); cursor: default; text-decoration: none; }
+    .caption {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding-top: 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .caption .c::after {
+      content: "";
+      display: inline-block;
+      width: 9px;
+      height: 12px;
+      margin-left: 4px;
+      background: var(--ink);
+      vertical-align: -1px;
+    }
+
+    .toast {
+      position: fixed;
+      z-index: 10;
+      right: max(16px, env(safe-area-inset-right, 0px));
+      bottom: max(16px, env(safe-area-inset-bottom, 0px));
+      left: max(16px, env(safe-area-inset-left, 0px));
+      display: flex;
+      width: max-content;
+      max-width: calc(100% - 32px);
+      margin: 0 auto;
+      align-items: center;
+      gap: 18px;
+      padding: 10px 12px;
+      border: 1.25px solid var(--ink);
+      background: var(--ink);
+      color: var(--invert-text);
+      font-size: 12px;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; pointer-events: auto; }
+    .toast-message { min-width: 0; overflow-wrap: anywhere; }
+    .undo {
+      flex: 0 0 auto;
+      padding: 4px 7px;
+      border: 1.25px solid var(--invert-text);
+      background: var(--invert-text);
+      color: var(--ink);
+      font: 700 11px var(--mono);
+      letter-spacing: .04em;
+      cursor: pointer;
+    }
+    .undo:hover { background: var(--ink); color: var(--invert-text); }
+    .undo:focus-visible { outline-color: var(--invert-text); }
+
+    /*
+      MOTION EFFECT FLAGS (mirrored in motion.flags below; true = on)
+      01 typedTitle: true       08 flipSort: true
+      02 rowPrint: true         09 meterTick: true
+      03 meterFill: true        10 eraseDelete: true
+      04 tokenParsing: true     11 undoTyping: true
+      05 inkFlash: true         12 syncedCursors: true
+      06 checkboxSteps: true    13 hoverScanline: true
+      07 strikeDraw: true       14 liveTimestamps: true
+    */
+    /* ===== TERMINAL MOTION: all animation and transition CSS lives here ===== */
+    .motion-title .title-cursor { display: inline-block; animation: cursor-blink 1.1s steps(1) infinite; }
+    .input-wrap:focus-within .input-caret { display: block; animation: cursor-blink 1.1s steps(1) infinite; }
+    .caption .c::after { animation: cursor-blink 1.1s steps(1) infinite; }
+    body.input-focused .caption .c::after { visibility: hidden; animation-play-state: paused; }
+    body.motion-cursors-off .input-caret { display: none; }
+    body.motion-cursors-off .caption .c::after { animation: none; }
+
+    .row.load-pending { visibility: hidden; }
+    .row.parsing .meta { visibility: hidden; }
+    .row.enter { animation: ink-hold 150ms steps(1, end); }
+    .row.enter .text { animation: ink-text 150ms steps(1, end); }
+    .row.enter .meta, .row.enter .rm { animation: ink-muted 150ms steps(1, end); }
+    .parse-token { display: inline-block; animation: token-out 200ms steps(4, end) forwards; }
+    .row.completing.checkbox-motion .check::before { animation: checkbox-fill 120ms steps(3, end) forwards; }
+    .row.completing.checkbox-motion .check::after { animation: check-appear 1ms steps(1, start) 120ms both; }
+    .row.completing.strike-motion .text { color: var(--muted); }
+    .row.completing.strike-motion .text::after { animation: strike-in 200ms steps(8, end) forwards; }
+    .row.uncompleting.checkbox-motion .check { background: var(--surface); }
+    .row.uncompleting.checkbox-motion .check::before {
+      transform: scaleX(1);
+      animation: checkbox-empty 120ms steps(3, end) forwards;
+    }
+    .row.uncompleting.checkbox-motion .check::after { animation: check-hide 1ms steps(1, start) 120ms forwards; }
+    .row.uncompleting.strike-motion .text { color: var(--ink); }
+    .row.uncompleting.strike-motion .text::after { animation: strike-out 200ms steps(8, end) forwards; }
+    .row.flip { transition: transform 250ms ease-out; }
+    .meter-percent.tick { animation: percent-tick 150ms steps(2, end); }
+    .row.collapsing {
+      overflow: hidden;
+      transition:
+        height 150ms steps(4, end),
+        padding-top 150ms steps(4, end),
+        padding-bottom 150ms steps(4, end),
+        border-width 150ms steps(4, end);
+    }
+    .row.scan::after {
+      content: "";
+      position: absolute;
+      z-index: 2;
+      top: 0;
+      right: 0;
+      left: 0;
+      height: 1px;
+      background: var(--ink);
+      opacity: .3;
+      pointer-events: none;
+      animation: scanline 200ms steps(8, end) forwards;
+    }
+    @keyframes cursor-blink { 50% { opacity: 0; } }
+    @keyframes ink-hold {
+      0%, 99% { background: var(--ink); }
+      100% { background: var(--panel); }
+    }
+    @keyframes ink-text {
+      0%, 99% { color: var(--invert-text); }
+      100% { color: var(--ink); }
+    }
+    @keyframes ink-muted {
+      0%, 99% { color: var(--invert-text); }
+      100% { color: var(--muted); }
+    }
+    @keyframes token-out {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(22px); }
+    }
+    @keyframes checkbox-fill {
+      from { transform: scaleX(0); }
+      to { transform: scaleX(1); }
+    }
+    @keyframes checkbox-empty {
+      from { transform: scaleX(1); }
+      to { transform: scaleX(0); }
+    }
+    @keyframes check-appear { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes check-hide { from { opacity: 1; } to { opacity: 0; } }
+    @keyframes strike-in { from { width: 0; } to { width: 100%; } }
+    @keyframes strike-out { from { width: 100%; } to { width: 0; } }
+    @keyframes percent-tick {
+      0%, 49% { background: var(--ink); color: var(--invert-text); }
+      50%, 100% { background: transparent; color: var(--invert-text); }
+    }
+    @keyframes scanline { from { top: 0; } to { top: calc(100% - 1px); } }
+
+    @media (max-width: 520px) {
+      .header-inner { grid-template-columns: 1fr; gap: 22px; padding-top: 26px; padding-bottom: 24px; }
+      .mark { margin-bottom: 18px; }
+      .summary { text-align: left; }
+      main { padding-top: 22px; }
+      .hint { display: none; }
+      .toolbar { align-items: flex-start; flex-direction: column; }
+      .tags { justify-content: flex-start; }
+      .footer { align-items: flex-start; flex-direction: column; }
+      .footer-actions { justify-content: flex-start; }
+    }
+
+    @media (max-width: 400px) {
+      .prompt { padding: 12px; }
+      .btn { padding-right: 10px; padding-left: 10px; }
+      .row { gap: 10px; padding-right: 12px; padding-left: 12px; }
+      .rm { opacity: 1; }
+      .caption { font-size: 11px; }
+    }
+
+    @media (hover: none), (pointer: coarse) {
+      .row.scan::after { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .001ms !important;
+        animation-delay: 0ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+      }
+      .row.load-pending { visibility: visible; }
+      .title-cursor, .input-caret, .caption .c::after { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="wrap header-inner">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 28 16" width="28" height="16" aria-hidden="true">
+          <rect x="0" y="0" width="4" height="4" fill="currentColor"/>
+          <rect x="4" y="4" width="4" height="4" fill="currentColor"/>
+          <rect x="4" y="8" width="4" height="4" fill="currentColor"/>
+          <rect x="0" y="12" width="4" height="4" fill="currentColor"/>
+          <rect x="14" y="12" width="12" height="4" fill="currentColor"/>
+        </svg>
+        <h1 aria-label="todo"><span id="titleText"></span><span class="title-cursor" aria-hidden="true"></span></h1>
+        <p class="date" id="dateLine">// monday, oct 19</p>
+      </div>
+      <div class="summary" aria-live="polite">
+        <div class="meter" id="meter">[<span id="meterCells">█████░░░░░░░░░░░</span>] <span class="meter-percent" id="meterPercent">33%</span></div>
+        <div class="shipped" id="shipped">2 / 6 shipped</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="card" aria-label="Todo list">
+      <form class="prompt" id="taskForm">
+        <label class="prompt-glyph" for="taskInput">&gt;</label>
+        <div class="input-wrap">
+          <input id="taskInput" name="task" type="text" maxlength="240" autocomplete="off" placeholder="add a task... #tag !p0" aria-describedby="syntaxHint">
+          <span class="input-caret" id="inputCaret" aria-hidden="true"></span>
+        </div>
+        <button class="btn" type="submit">ADD</button>
+      </form>
+      <div class="hint" id="syntaxHint">#tag to label · !p0 !p1 !p2 priority · / to focus</div>
+      <div class="toolbar">
+        <div class="tabs" aria-label="Task status">
+          <button type="button" data-view="all" aria-pressed="true">all</button>
+          <button type="button" data-view="open" aria-pressed="false">open</button>
+          <button type="button" data-view="done" aria-pressed="false">done</button>
+        </div>
+        <div class="tags" id="tagFilters" aria-label="Filter by tag"></div>
+      </div>
+      <div class="list" id="taskList" aria-live="polite"></div>
+      <div class="footer">
+        <span id="counts">// 4 open · 2 done</span>
+        <div class="footer-actions">
+          <button class="quiet" id="clearDone" type="button">clear done</button>
+          <button class="quiet" id="resetExamples" type="button">reset examples</button>
+        </div>
+      </div>
+    </section>
+    <div class="caption">
+      <span>[app] [todo]</span>
+      <span class="c">// ship the small things first</span>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <span class="toast-message" id="toastMessage"></span>
+    <button class="undo" id="undoButton" type="button">UNDO</button>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const STORAGE_KEY = "cl-todo-v1";
+      const taskForm = document.querySelector("#taskForm");
+      const taskInput = document.querySelector("#taskInput");
+      const inputCaret = document.querySelector("#inputCaret");
+      const taskList = document.querySelector("#taskList");
+      const tagFilters = document.querySelector("#tagFilters");
+      const counts = document.querySelector("#counts");
+      const meterCells = document.querySelector("#meterCells");
+      const meterPercent = document.querySelector("#meterPercent");
+      const shipped = document.querySelector("#shipped");
+      const clearDone = document.querySelector("#clearDone");
+      const resetExamples = document.querySelector("#resetExamples");
+      const dateLine = document.querySelector("#dateLine");
+      const titleText = document.querySelector("#titleText");
+      const toast = document.querySelector("#toast");
+      const toastMessage = document.querySelector("#toastMessage");
+      const undoButton = document.querySelector("#undoButton");
+
+      let view = "all";
+      let activeTag = "";
+      let newTaskState = null;
+      let undoState = null;
+      let toastTimer = 0;
+
+      const uid = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+      const makeExamples = () => {
+        const now = Date.now();
+        return [
+          { id: uid(), text: "Ship onboarding walkthrough", tag: "work", priority: 0, done: false, createdAt: now - 18 * 60 * 1000 },
+          { id: uid(), text: "Review mobile spacing", tag: "design", priority: 1, done: false, createdAt: now - 2 * 60 * 60 * 1000 },
+          { id: uid(), text: "Book dentist appointment", tag: "life", priority: 2, done: false, createdAt: now - 5 * 60 * 60 * 1000 },
+          { id: uid(), text: "Draft sample app README", tag: "work", priority: 1, done: false, createdAt: now - 26 * 60 * 60 * 1000 },
+          { id: uid(), text: "Archive old moodboard", tag: "design", priority: 2, done: true, createdAt: now - 3 * 24 * 60 * 60 * 1000 },
+          { id: uid(), text: "Renew library card", tag: "life", priority: 2, done: true, createdAt: now - 6 * 24 * 60 * 60 * 1000 }
+        ];
+      };
+
+      const loadTasks = () => {
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (!stored) return makeExamples();
+          const parsed = JSON.parse(stored);
+          return Array.isArray(parsed) ? parsed : makeExamples();
+        } catch {
+          return makeExamples();
+        }
+      };
+
+      let tasks = loadTasks();
+
+      const saveTasks = () => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+        } catch {
+          // The app remains usable in memory when storage is unavailable.
+        }
+      };
+
+      const escapeHtml = (value) => String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+      const timeAgo = (timestamp) => {
+        const seconds = Math.max(1, Math.floor((Date.now() - timestamp) / 1000));
+        if (seconds < 60) return "just now";
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ago`;
+      };
+
+      const parseInput = (raw) => {
+        const tagMatch = raw.match(/(?:^|\s)#([\w-]+)/i);
+        const priorityMatch = raw.match(/(?:^|\s)!p([012])\b/i);
+        const text = raw
+          .replace(/(?:^|\s)#[\w-]+/gi, " ")
+          .replace(/(?:^|\s)!p[012]\b/gi, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        return {
+          text,
+          tag: tagMatch ? tagMatch[1].toLowerCase() : "general",
+          priority: priorityMatch ? Number(priorityMatch[1]) : 2
+        };
+      };
+
+      const renderRawText = (raw) => {
+        const tokenPattern = /(#[\w-]+|!p[012]\b)/gi;
+        let cursor = 0;
+        let result = "";
+        for (const match of raw.matchAll(tokenPattern)) {
+          result += escapeHtml(raw.slice(cursor, match.index));
+          result += `<span class="parse-token">${escapeHtml(match[0])}</span>`;
+          cursor = match.index + match[0].length;
+        }
+        return result + escapeHtml(raw.slice(cursor));
+      };
+
+      const sortedTasks = () => [...tasks].sort((a, b) =>
+        Number(a.done) - Number(b.done) ||
+        a.priority - b.priority ||
+        b.createdAt - a.createdAt
+      );
+
+      const filteredTasks = () => sortedTasks().filter((task) => {
+        const statusMatch = view === "all" || (view === "done" ? task.done : !task.done);
+        return statusMatch && (!activeTag || task.tag === activeTag);
+      });
+
+      const stats = () => {
+        const total = tasks.length;
+        const done = tasks.filter((task) => task.done).length;
+        return { total, done, open: total - done };
+      };
+
+      const meterValues = (done, total) => ({
+        filled: total ? Math.round((done / total) * 16) : 0,
+        percent: total ? Math.round((done / total) * 100) : 0
+      });
+
+      const setMeter = (filled, percent) => {
+        meterCells.textContent = `${"█".repeat(filled)}${"░".repeat(16 - filled)}`;
+        meterPercent.textContent = `${percent}%`;
+      };
+
+      const emptyState = () => {
+        if (activeTag) return [`no [${activeTag}] tasks`, "switch tags or add one from the prompt above"];
+        if (view === "done") return ["nothing shipped yet", "check off a task and it will land here"];
+        if (view === "open") return ["all clear", "the open queue is empty"];
+        return ["empty buffer", "type a task above and press enter"];
+      };
+
+      const renderDate = () => {
+        const formatted = new Intl.DateTimeFormat("en-US", {
+          weekday: "long",
+          month: "short",
+          day: "numeric"
+        }).format(new Date()).toLowerCase();
+        dateLine.textContent = `// ${formatted}`;
+      };
+
+      const renderSummary = ({ updateMeter = true } = {}) => {
+        const { total, done, open } = stats();
+        if (updateMeter) {
+          const values = meterValues(done, total);
+          setMeter(values.filled, values.percent);
+        }
+        shipped.textContent = `${done} / ${total} shipped`;
+        counts.textContent = `// ${open} open · ${done} done`;
+        clearDone.disabled = done === 0;
+      };
+
+      const renderTags = () => {
+        const tags = [...new Set(tasks.map((task) => task.tag))].sort();
+        tagFilters.innerHTML = tags.map((tag) => {
+          const encoded = encodeURIComponent(tag);
+          return `<button class="tag" type="button" data-tag="${encoded}" aria-pressed="${activeTag === tag}">[${escapeHtml(tag)}]</button>`;
+        }).join("");
+      };
+
+      const renderList = () => {
+        const visible = filteredTasks();
+        if (!visible.length) {
+          const [title, copy] = emptyState();
+          taskList.innerHTML = `
+            <div class="empty">
+              <div>
+                <h2 class="empty-title">${escapeHtml(title)}</h2>
+                <p class="empty-copy">${escapeHtml(copy)}</p>
+              </div>
+            </div>`;
+          return;
+        }
+
+        taskList.innerHTML = visible.map((task) => {
+          const isNew = newTaskState?.id === task.id;
+          const isParsing = isNew && newTaskState.parse;
+          const classes = [
+            "row",
+            task.done ? "done" : "",
+            !task.done && task.priority === 0 ? "urgent" : "",
+            isNew && newTaskState.flash ? "enter" : "",
+            isParsing ? "parsing" : "",
+            !motion.loadComplete && motion.flags.rowPrint ? "load-pending" : ""
+          ].filter(Boolean).join(" ");
+          return `
+            <div class="${classes}" data-id="${escapeHtml(task.id)}">
+              <button class="check" type="button" role="checkbox" aria-checked="${task.done}" aria-label="${task.done ? "Reopen" : "Complete"} ${escapeHtml(task.text)}"></button>
+              <div class="body">
+                <div class="text">${isParsing ? renderRawText(newTaskState.raw) : escapeHtml(task.text)}</div>
+                <div class="meta">p${task.priority} · [${escapeHtml(task.tag)}] · <span class="time" data-created="${task.createdAt}">${timeAgo(task.createdAt)}</span></div>
+              </div>
+              <button class="rm" type="button" aria-label="Delete ${escapeHtml(task.text)}">rm</button>
+            </div>`;
+        }).join("");
+      };
+
+      const renderTabs = () => {
+        document.querySelectorAll("[data-view]").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.view === view));
+        });
+      };
+
+      const render = (options = {}) => {
+        if (activeTag && !tasks.some((task) => task.tag === activeTag)) activeTag = "";
+        renderSummary(options);
+        renderTags();
+        renderTabs();
+        renderList();
+      };
+
+      const showToast = (message, undo) => {
+        window.clearTimeout(toastTimer);
+        toastMessage.textContent = message;
+        undoState = typeof undo === "function" ? undo : null;
+        undoButton.hidden = !undoState;
+        toast.classList.add("show");
+        toastTimer = window.setTimeout(() => {
+          toast.classList.remove("show");
+          undoState = null;
+        }, 4000);
+      };
+
+      const findTask = (row) => tasks.find((task) => task.id === row.dataset.id);
+
+      const motion = {
+        flags: {
+          typedTitle: true,
+          rowPrint: true,
+          meterFill: true,
+          tokenParsing: true,
+          inkFlash: true,
+          checkboxSteps: true,
+          strikeDraw: true,
+          flipSort: true,
+          meterTick: true,
+          eraseDelete: true,
+          undoTyping: true,
+          syncedCursors: true,
+          hoverScanline: true,
+          liveTimestamps: true
+        },
+        reduce: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+        loadComplete: false,
+        active: new Set(),
+        caretCanvas: document.createElement("canvas"),
+
+        track(finisher) {
+          this.active.add(finisher);
+          return () => this.active.delete(finisher);
+        },
+
+        interrupt() {
+          [...this.active].forEach((finish) => finish());
+          document.querySelectorAll(".row.scan, .row.flip").forEach((row) => {
+            row.classList.remove("scan", "flip");
+            row.style.transform = "";
+          });
+          meterPercent.classList.remove("tick");
+        },
+
+        captureRows() {
+          return new Map([...taskList.querySelectorAll(".row")].map((row) => [
+            row.dataset.id,
+            row.getBoundingClientRect()
+          ]));
+        },
+
+        flip(before) {
+          if (this.reduce || !this.flags.flipSort) return;
+          const moving = [];
+          taskList.querySelectorAll(".row").forEach((row) => {
+            const previous = before.get(row.dataset.id);
+            if (!previous) return;
+            const next = row.getBoundingClientRect();
+            const deltaY = previous.top - next.top;
+            if (!deltaY) return;
+            row.style.transform = `translateY(${deltaY}px)`;
+            moving.push(row);
+          });
+          if (!moving.length) return;
+          taskList.offsetHeight;
+          requestAnimationFrame(() => {
+            moving.forEach((row) => {
+              row.classList.add("flip");
+              row.style.transform = "";
+              window.setTimeout(() => row.classList.remove("flip"), 260);
+            });
+          });
+        },
+
+        runLoad() {
+          const { total, done } = stats();
+          const finalMeter = meterValues(done, total);
+          const rows = [...taskList.querySelectorAll(".row")];
+          const timers = [];
+          let finished = false;
+          const finish = (focusInput = false) => {
+            if (finished) return;
+            finished = true;
+            timers.forEach(window.clearTimeout);
+            this.active.delete(interruptFinish);
+            this.loadComplete = true;
+            titleText.textContent = "todo";
+            titleText.parentElement.classList.remove("motion-title");
+            rows.forEach((row) => row.classList.remove("load-pending"));
+            setMeter(finalMeter.filled, finalMeter.percent);
+            if (focusInput) {
+              taskInput.focus();
+              this.updateCaret();
+            }
+          };
+          const interruptFinish = () => finish(false);
+
+          if (this.reduce) {
+            finish(true);
+            return;
+          }
+
+          this.track(interruptFinish);
+          titleText.textContent = this.flags.typedTitle ? "" : "todo";
+          if (this.flags.typedTitle) titleText.parentElement.classList.add("motion-title");
+          if (this.flags.meterFill) setMeter(0, 0);
+
+          const titleDuration = this.flags.typedTitle ? 4 * 70 : 0;
+          if (this.flags.typedTitle) {
+            [..."todo"].forEach((_, index) => {
+              timers.push(window.setTimeout(() => {
+                titleText.textContent = "todo".slice(0, index + 1);
+              }, (index + 1) * 70));
+            });
+          }
+
+          timers.push(window.setTimeout(() => {
+            titleText.textContent = "todo";
+            titleText.parentElement.classList.remove("motion-title");
+            taskInput.focus();
+            this.updateCaret();
+          }, titleDuration));
+
+          if (this.flags.rowPrint) {
+            rows.forEach((row, index) => {
+              timers.push(window.setTimeout(() => {
+                row.classList.remove("load-pending");
+              }, titleDuration + (index + 1) * 30));
+            });
+          } else {
+            rows.forEach((row) => row.classList.remove("load-pending"));
+          }
+
+          if (this.flags.meterFill && finalMeter.filled) {
+            for (let step = 1; step <= finalMeter.filled; step += 1) {
+              timers.push(window.setTimeout(() => {
+                const percent = Math.round((finalMeter.percent * step) / finalMeter.filled);
+                setMeter(step, percent);
+              }, titleDuration + step * 25));
+            }
+          } else {
+            setMeter(finalMeter.filled, finalMeter.percent);
+          }
+
+          const outputDuration = Math.max(
+            this.flags.rowPrint ? rows.length * 30 : 0,
+            this.flags.meterFill ? finalMeter.filled * 25 : 0
+          );
+          timers.push(window.setTimeout(() => finish(false), titleDuration + outputDuration + 10));
+        },
+
+        parseTask(task) {
+          const duration = Math.max(
+            this.flags.tokenParsing ? 200 : 0,
+            this.flags.inkFlash ? 150 : 0
+          );
+          if (this.reduce || !duration) {
+            newTaskState = null;
+            render();
+            return;
+          }
+          let finished = false;
+          let timer = 0;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            window.clearTimeout(timer);
+            this.active.delete(finish);
+            if (newTaskState?.id === task.id) newTaskState = null;
+            render();
+            taskInput.focus();
+            this.updateCaret();
+          };
+          this.track(finish);
+          timer = window.setTimeout(finish, duration);
+        },
+
+        completeTask(task, row) {
+          const wasDone = task.done;
+          const previousDone = stats().done;
+          const duration = this.reduce ? 0 : Math.max(
+            this.flags.checkboxSteps ? 120 : 0,
+            this.flags.strikeDraw ? 200 : 0
+          );
+          if (duration) {
+            row.classList.add(wasDone ? "uncompleting" : "completing");
+            if (this.flags.checkboxSteps) row.classList.add("checkbox-motion");
+            if (this.flags.strikeDraw) row.classList.add("strike-motion");
+          }
+          let finished = false;
+          let timer = 0;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            window.clearTimeout(timer);
+            this.active.delete(finish);
+            const before = this.captureRows();
+            task.done = !wasDone;
+            saveTasks();
+            render({ updateMeter: false });
+            this.flip(before);
+            this.meterTick(previousDone, stats().done, tasks.length);
+            if (task.done) showToast(`✓ shipped: ${task.text}`);
+          };
+          if (!duration || (!this.flags.checkboxSteps && !this.flags.strikeDraw)) {
+            finish();
+            return;
+          }
+          this.track(finish);
+          timer = window.setTimeout(finish, duration);
+        },
+
+        meterTick(fromDone, toDone, total) {
+          const start = meterValues(fromDone, total);
+          const end = meterValues(toDone, total);
+          if (this.reduce || !this.flags.meterTick) {
+            setMeter(end.filled, end.percent);
+            return;
+          }
+          const distance = Math.abs(end.filled - start.filled);
+          const steps = Math.max(1, distance);
+          const direction = Math.sign(end.filled - start.filled);
+          const timers = [];
+          let finished = false;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            timers.forEach(window.clearTimeout);
+            this.active.delete(finish);
+            setMeter(end.filled, end.percent);
+            meterPercent.classList.remove("tick");
+          };
+          this.track(finish);
+          meterPercent.classList.remove("tick");
+          meterPercent.offsetWidth;
+          meterPercent.classList.add("tick");
+          for (let step = 1; step <= steps; step += 1) {
+            timers.push(window.setTimeout(() => {
+              const filled = start.filled + direction * step;
+              const percent = Math.round(start.percent + ((end.percent - start.percent) * step) / steps);
+              setMeter(filled, percent);
+            }, step * 25));
+          }
+          timers.push(window.setTimeout(finish, Math.max(150, steps * 25)));
+        },
+
+        deleteTask(task, index, row) {
+          const text = row.querySelector(".text");
+          if (this.reduce || !this.flags.eraseDelete) {
+            this.finishDelete(task, index);
+            return;
+          }
+          const original = task.text;
+          const started = performance.now();
+          let frame = 0;
+          let collapseTimer = 0;
+          let finished = false;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            cancelAnimationFrame(frame);
+            window.clearTimeout(collapseTimer);
+            this.active.delete(finish);
+            this.finishDelete(task, index);
+          };
+          const collapse = () => {
+            row.style.height = `${row.offsetHeight}px`;
+            row.offsetHeight;
+            row.classList.add("collapsing");
+            requestAnimationFrame(() => {
+              row.style.height = "0";
+              row.style.paddingTop = "0";
+              row.style.paddingBottom = "0";
+              row.style.borderWidth = "0";
+            });
+            collapseTimer = window.setTimeout(finish, 150);
+          };
+          const erase = (now) => {
+            const progress = Math.min(1, (now - started) / 250);
+            const remaining = Math.ceil(original.length * (1 - progress));
+            text.textContent = original.slice(0, remaining);
+            if (progress < 1) frame = requestAnimationFrame(erase);
+            else collapse();
+          };
+          this.track(finish);
+          frame = requestAnimationFrame(erase);
+        },
+
+        finishDelete(task, index) {
+          const currentIndex = tasks.findIndex((item) => item.id === task.id);
+          if (currentIndex === -1) return;
+          const removed = tasks.splice(currentIndex, 1)[0];
+          saveTasks();
+          render();
+          showToast(`rm: ${removed.text}`, () => this.undoDelete(removed, index));
+        },
+
+        undoDelete(task, index) {
+          tasks.splice(Math.min(index, tasks.length), 0, task);
+          saveTasks();
+          render();
+          const row = taskList.querySelector(`[data-id="${CSS.escape(task.id)}"]`);
+          const text = row?.querySelector(".text");
+          if (!text || this.reduce || !this.flags.undoTyping) return;
+          const original = task.text;
+          text.textContent = "";
+          const started = performance.now();
+          let frame = 0;
+          let finished = false;
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            cancelAnimationFrame(frame);
+            this.active.delete(finish);
+            text.textContent = original;
+          };
+          const type = (now) => {
+            const progress = Math.min(1, (now - started) / 250);
+            const visible = Math.floor(original.length * progress);
+            text.textContent = original.slice(0, visible);
+            if (progress < 1) frame = requestAnimationFrame(type);
+            else finish();
+          };
+          this.track(finish);
+          frame = requestAnimationFrame(type);
+        },
+
+        updateCaret() {
+          if (!this.flags.syncedCursors) return;
+          const context = this.caretCanvas.getContext("2d");
+          const style = getComputedStyle(taskInput);
+          context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          const selection = taskInput.selectionStart ?? taskInput.value.length;
+          const width = context.measureText(taskInput.value.slice(0, selection)).width;
+          const max = Math.max(0, taskInput.clientWidth - 9);
+          const position = Math.min(max, Math.max(0, width - taskInput.scrollLeft));
+          inputCaret.style.setProperty("--caret-x", `${position}px`);
+        },
+
+        setupCursors() {
+          if (!this.flags.syncedCursors) {
+            document.body.classList.add("motion-cursors-off");
+            taskInput.style.caretColor = "var(--ink)";
+            return;
+          }
+          const update = () => this.updateCaret();
+          taskInput.addEventListener("focus", () => {
+            document.body.classList.add("input-focused");
+            inputCaret.style.animationDelay = `${-(performance.now() % 1100)}ms`;
+            update();
+          });
+          taskInput.addEventListener("blur", () => document.body.classList.remove("input-focused"));
+          ["input", "keyup", "click", "scroll"].forEach((eventName) => taskInput.addEventListener(eventName, update));
+          document.addEventListener("selectionchange", () => {
+            if (document.activeElement === taskInput) update();
+          });
+          document.fonts?.ready.then(update);
+        },
+
+        setupScanline() {
+          if (this.reduce || !this.flags.hoverScanline || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+          taskList.addEventListener("pointerover", (event) => {
+            const row = event.target.closest(".row");
+            if (!row || row.contains(event.relatedTarget)) return;
+            row.classList.remove("scan");
+            row.offsetWidth;
+            row.classList.add("scan");
+            row.addEventListener("animationend", () => row.classList.remove("scan"), { once: true });
+          });
+        },
+
+        setupTimestamps() {
+          if (!this.flags.liveTimestamps) return;
+          window.setInterval(() => {
+            taskList.querySelectorAll(".time").forEach((element) => {
+              element.textContent = timeAgo(Number(element.dataset.created));
+            });
+          }, 30000);
+        }
+      };
+
+      taskForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const raw = taskInput.value.trim();
+        const parsed = parseInput(raw);
+        if (!parsed.text) {
+          taskInput.focus();
+          return;
+        }
+        const task = {
+          id: uid(),
+          text: parsed.text,
+          tag: parsed.tag,
+          priority: parsed.priority,
+          done: false,
+          createdAt: Date.now()
+        };
+        tasks.push(task);
+        newTaskState = {
+          id: task.id,
+          raw,
+          parse: motion.flags.tokenParsing && !motion.reduce,
+          flash: motion.flags.inkFlash && !motion.reduce
+        };
+        taskInput.value = "";
+        saveTasks();
+        render();
+        taskInput.focus();
+        motion.updateCaret();
+        motion.parseTask(task);
+      });
+
+      taskList.addEventListener("click", (event) => {
+        const row = event.target.closest(".row");
+        if (!row) return;
+        const task = findTask(row);
+        if (!task) return;
+
+        if (event.target.closest(".check")) {
+          motion.completeTask(task, row);
+          return;
+        }
+
+        if (event.target.closest(".rm")) {
+          const index = tasks.findIndex((item) => item.id === task.id);
+          motion.deleteTask(task, index, row);
+        }
+      });
+
+      document.querySelector(".tabs").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-view]");
+        if (!button) return;
+        view = button.dataset.view;
+        render();
+      });
+
+      tagFilters.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-tag]");
+        if (!button) return;
+        const tag = decodeURIComponent(button.dataset.tag);
+        activeTag = activeTag === tag ? "" : tag;
+        render();
+      });
+
+      clearDone.addEventListener("click", () => {
+        const removed = tasks.filter((task) => task.done);
+        if (!removed.length) return;
+        tasks = tasks.filter((task) => !task.done);
+        saveTasks();
+        render();
+        showToast(`cleared ${removed.length} done task${removed.length === 1 ? "" : "s"}`, () => {
+          tasks.push(...removed);
+          saveTasks();
+          render();
+        });
+      });
+
+      resetExamples.addEventListener("click", () => {
+        tasks = makeExamples();
+        view = "all";
+        activeTag = "";
+        saveTasks();
+        render();
+        showToast("reset: example tasks restored");
+      });
+
+      undoButton.addEventListener("click", () => {
+        if (!undoState) return;
+        const undo = undoState;
+        undoState = null;
+        undo();
+        toast.classList.remove("show");
+      });
+
+      document.addEventListener("click", () => motion.interrupt(), true);
+      document.addEventListener("keydown", () => motion.interrupt(), true);
+
+      document.addEventListener("keydown", (event) => {
+        const isTyping = event.target.matches("input, textarea, [contenteditable='true']");
+        if (event.key === "/" && !isTyping) {
+          event.preventDefault();
+          taskInput.focus();
+        }
+        if (event.key === "Escape" && document.activeElement === taskInput) taskInput.blur();
+      });
+
+      if (motion.reduce) {
+        motion.loadComplete = true;
+        titleText.textContent = "todo";
+      }
+      renderDate();
+      motion.setupCursors();
+      motion.setupScanline();
+      motion.setupTimestamps();
+      render();
+      motion.runLoad();
+    })();
+  </script>
+</body>
+</html>
